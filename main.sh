@@ -1,6 +1,6 @@
 #!/bin/bash
 . ./functions
-. ./config.cfg
+. ../config.cfg
 
 case $1 in
 add)
