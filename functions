@@ -1,0 +1,344 @@
+#!/bin/bash
+usergroup='user.group'
+declare -a ACCESSKEYS
+
+addIAMUser() {  # Add IAM User and generate AccessKeyId and SecretAccessKey
+		# Arguments: $1 - username
+
+	# Add IAM user
+	if [ -z "$1" ]; then echo "No argument passed !"
+		exit 1
+	fi
+	echo "Creating IAM user $1..."
+	aws iam create-user --user-name $1 >/dev/null
+	if [ $? -ne 0 ]; then echo "Error adding user $1"
+		exit 1
+	else echo "Added user $1"
+	fi
+	
+	# Add IAM user to group
+	echo "Adding user to group $usergroup..."
+	aws iam add-user-to-group --user-name $1 --group-name $usergroup >/dev/null
+	if [ $? -ne 0 ]; then echo "Error adding user $1 to group $usergroup"
+		exit 1
+	else echo "Added user $1 to group $usergroup"
+	fi
+	
+	# Get user's access keys
+	z=0
+	for i in $(aws iam create-access-key --user-name $1| jq -r ".AccessKey| .AccessKeyId, .SecretAccessKey"); do
+		ACCESSKEYS[$z]=$i		
+		let z++
+	done
+
+	return 0
+}
+
+delIAMUser() {	# Remove user from AWS IAM and delete AccessKeyId and SecretAccessKey
+		# Arguments: $1 - username
+ 
+	# Delete user from group and remove from IAM
+	if [ -z "$1" ]; then echo "No argument passed !"
+		exit 1
+	fi
+	
+	# Check if user exists
+	echo "Checking if user $1 exists in IAM..."
+	aws iam wait user-exists --user-name $1
+	if [ $? -ne 0 ]; then echo "User $1 not exists in IAM"
+		exit 1
+	fi
+	
+	# Get user groups and remove user from them
+	for i in $(aws iam list-groups-for-user --user-name $1 | jq -r ".Groups[].GroupName"); do 
+		echo "Removing user $1 from group $i..."
+		aws iam remove-user-from-group --user-name $1 --group-name $i >/dev/null
+	done	
+	
+	# Get and delete user's access keys
+	for i in $(aws iam list-access-keys --user-name $1 | jq -r ".AccessKeyMetadata[].AccessKeyId"); do 
+		echo "Removing users $1 access key $i"
+		aws iam delete-access-key --user-name $1 --access-key $i >/dev/null
+	done		
+
+	echo "Delting IAM user $1"
+	aws iam delete-user --user-name $1 >/dev/null
+	if [ $? -ne 0 ]; then echo "Error deleting user $1"
+		exit 1
+	else echo "User $1 deleted sucessfully."
+	fi
+	
+	return 0
+}
+
+createS3Bucket() {	# Create S3 bucket space
+			# Arguments: 	$1 - username
+			#		$2 - S3 bucket name
+
+	test $# -ne 2 && { echo "Invalid argument numbers in function createS3Bucet: $#"; exit 1; }
+
+	echo "Creating user's s3 bucketspace..."
+	aws s3api put-object --bucket $2 --key $1/ >/dev/null
+	if [ $? -ne 0 ]; then echo "Error creating bucketspace for user $1 !!!"
+		exit 1
+	else echo "Added bucketspace for user $1"
+	fi
+	
+	return 0
+}
+
+deleteS3Bucket() {	# Delete S3 bucket space
+			# Arguments: 	$1 - username
+			#		$2 - S3 bucet name
+
+	test $# -ne 2 && { echo "Invalid argument numbers in function deleteS3Bucket: $#"; exit 1; }
+
+	echo "Removing user $1 s3 bucketspace $2"
+	aws s3 rm --recursive --only-show-errors s3://$2/$1 >/dev/null
+	if [ $? -ne 0 ]; then echo "Error removing user $1 bucketspace !!!"
+		exit 1
+	else echo "User $1 bucketspace removed."
+	fi
+
+	return 0
+
+}
+
+createIPAUser() {	# Add user to IPA authorization system
+			# Arguments:	$1 - username
+			#		$2 - user's first name
+			#		$3 - user's last name
+			#		$4 - user's email address
+			#		$5 - user's public key
+
+
+	# Check for arguments number
+	test $# -ne 5 && { echo "Invalid argument numbers in function createIPAUser: $#"; exit 1; }
+
+	echo "Adding $1 to IPA authorization system"
+	# Add user with $first and $last name, $email address, $1	
+	ipa user-add $1 --first=$2 --last=$3 --email=$4 --homedir=/home/$1 --shell=/bin/bash --sshpubkey="$5" >/dev/null
+	 if [ $? -ne 0 ]; then echo "Error adding IPA user $1"
+		exit 1
+	else echo "User $1 added to IPA system"
+	fi
+
+	return 0
+}
+
+deleteIPAUser() {	# Delete IPA user
+			# Arguments: $1 - username
+
+	ipa user-del $1
+	if [ $? -ne 0 ]; then echo "Error deleting IPA user $1"
+                 exit 1
+         else echo "User $1 deleted from IPA system"
+         fi
+
+
+	return 0
+}
+
+
+
+createEFSHomedir() {	# Create user's home dir in EFS resources
+			# Arguments: 	$1 - username
+			#		$2 - EFS url
+
+	test $# -ne 2 && { echo "Invalid argument numbers in function createEFSHomedir: $#"; exit 1; }
+
+	# Check if EFS /home is mounted
+	grep -qs "$2://home" /proc/mounts && echo "EFS storage is mounted." || { echo "EFS storage is NOT mounted !!!";  exit 1; }
+	# Prepare user's home dir
+	mkdir /home/$1 && chown $1.$1 /home/$1 && chmod 750 /home/$1 && echo "EFS Home dir for user $1 prepered." || { echo "Couldn't prepare EFS home dir for user $1 !!!"; exit 1; }
+
+	return 0
+
+}
+
+deleteEFSHomedir() {	# Delete user's home dir in EFS resources
+                        # Arguments: 	$1 - username
+			#		$2 - EFS url
+
+	test $# -ne 2 && { echo "Invalid argument numbers in function deleteEFSHomedir: $#"; exit 1; }
+
+	# Check if EFS /home is mounted
+	grep -qs "$2://home" /proc/mounts && echo "EFS storage is mounted." || { echo "EFS storage is NOT mounted !!!"; exit 1; }
+	
+	# Delete user's homedir
+	rm -r /home/$1 && echo "User $1 homedir deleted from EFS system." || { echo "Error deleting user $1 EFS homedir !!!";  exit 1; }
+	
+	return 0
+}
+
+generateUserDataFile() {	# Generate file for AMI configuration
+				# Arguments:	$1 - username
+				#		$2 - AccessKeyId
+				#		$3 - SecretAccessKey
+				#		$4 - userdata file
+				#		$5 - EFS url
+				#		$6 - S3 Bucket Name
+
+	# Check number of argument passed to function	
+	test $# -ne 6 && { echo "Invalid argument numbers in function generateUserDataFile: $#"; exit 1; }
+	
+	# Check if username is valid
+	userid=$(id -u $1) || { echo "Username: $1 not in IPA system !"; exit 1; }
+	
+	# Generate file
+	echo "Generating AMI configuration file: $4"
+	cat <<EOF > ./$4 || { echo "Can not save $4 file !"; exit 1; }
+#!/bin/bash
+################################
+# Montowanie katalogu domowego #
+################################
+
+ACCESS_KEY_ID="$2"
+SECRET_ACCESS_KEY="$3"
+mkdir -p /home/$1
+chown $1.$1 /home/$1
+echo "$5:/home/$1 /home/$1    nfs4    nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2 0 0" >> /etc/fstab
+mount /home/$1
+
+########################################
+# Montowanie przestrzeni roboczej WORK #
+########################################
+
+echo -e "o\nn\np\n1\n\n\nw" | fdisk /dev/xvdc
+mkfs.xfs /dev/xvdc1
+mkdir -p /WORK
+echo "/dev/xvdc1 /WORK xfs	defaults	0 0" >> /etc/fstab
+mount /WORK
+chmod 750 /WORK
+chown $1.$1 /WORK
+ln -s /WORK /home/$1/WORK
+
+########################
+# Montowanie zasobu S3 #
+########################
+
+echo "\$ACCESS_KEY_ID:\$SECRET_ACCESS_KEY" > /etc/s3fs.passwd
+chmod 400 /etc/s3fs.passwd
+mkdir /home/$1/S3
+s3fs $6:/$1 /home/$1/S3 -o passwd_file=/etc/s3fs.passwd,allow_other,uid=$userid,umask=077,gid=$userid
+EOF
+	
+	return 0
+}
+
+runInstance() {	# Run AMI instance
+		# Arguments: 	$1 - username
+		#		$2 - userdata file
+		#		$3 - AMI Image ID to start instance
+		#		$4 - Instance type (eg. m4.xlarge)
+		#		$5 - Security group ids
+		#		$6 - VPC Subnet Id
+		#		$7 - IAM Key Name for instance Management
+
+	# Check number of arguments
+	test $# -ne 7 && { echo "Invalid argument numbers in function runInstance(): $#"; exit 1; }	
+
+
+	echo "Running AMI instance for user $1"
+
+	# Get instance ID	
+	instanceId=$(aws ec2 run-instances --image-id $3 --count 1 --instance-type $4 --security-group-ids $5 --subnet-id $6 --key-name $7 --user-data file://$2 | jq -r ".Instances[].InstanceId") || { echo "Error running instance for user $1 !"; exit 1; }
+	
+	# Check instance ID
+	echo "Instance ID: $instanceId"
+
+	# Wait until instance is UP
+	echo "Waiting for AMI instance to iniciate..."
+	aws ec2 wait instance-running --instance-ids $instanceId && echo "Instance ID: $instanceId is UP."
+	
+	# Tag instance with username
+	echo "Tagging instance $instanceId with Name=$1"
+	aws ec2 create-tags --resources $instanceId --tags Key=Name,Value=$1 >/dev/null || { echo "Can not Tag instance $instanceId with keys name=$1 !"; exit 1; }
+	
+	# Get instance IP address
+	amiIpAddress=`aws ec2 describe-instances --instance-ids $instanceId | jq -r ".Reservations[].Instances[].PublicIpAddress"` || { echo "Can not get instance public IP address"; exit 1; }
+	echo "Instance public IP address is: $amiIpAddress"
+
+	# Get instance FQDN
+	amiDnsName=`aws ec2 describe-instances --instance-ids $instanceId | jq -r ".Reservations[].Instances[].PublicDnsName"` || { echo "Can not get instance public DNS name"; exit 1; }
+	echo "Instance public DNS name is: $amiDnsName"
+
+
+	return 0
+
+}
+
+terminateInstance() {	# Terminate instances taged as Name=$username (DELETE ALL INSTANCES USER HAS)
+			# arguments: $1 - username
+	
+	# Check for argument passed
+	test $# -ne 1 && { echo "Invalid argument numbers in function terminateInstance(): $#"; exit 1; }
+
+	# Instance tag = $username
+
+	# Get $username TAG instance ids 
+	for i in `aws ec2 describe-tags --filter "Name=resource-type,Values=instance" "Name=value,Values=$1" | jq -r ".Tags[].ResourceId"`; do
+	echo "Trying to terminate instance: $i "
+	
+	# Remove each instance and wait for termination	
+	aws ec2 terminate-instances --instance-ids $i >/dev/null || { echo "Error terminate instance $i !"; exit 1; }
+	
+	# Wait until the instance is terminated
+	aws ec2 wait instance-terminated --instance-ids $i && echo "Instance $i is terminated successfully."
+
+	done
+	
+	return 0
+}
+
+createCredentialsFile() {	# Create file containing S3Keys, AMI IP, HS IP, username
+				# Arguments: 	$1 - usename
+				#		$2 - Access Key ID
+				#		$3 - Secret Access Key
+				#		$4 - AMI IP address
+				#		$5 - HS IP address
+				#		$6 - credentials file name
+
+	# Check number of argument passed
+	test $# -ne 6 && { echo "Invalid argument numbers in function createCredentialsFile(): $#"; exit 1; }
+
+	echo "Creating credentials file $6"
+	# Genereta file
+	 cat <<EOF > ./$6 || { echo "Can not save userdata file !"; exit 1; }
+Username: $1
+Access Key Id: $2
+Secret Access Key: $3
+AMI IP address: $4
+Hes Server IP address: $5
+EOF
+
+	return 0
+}
+
+encryptCredentialsFile() {	# Encrypt file with user credentials
+				# Arguments: 	$1 - user's public key
+				#		$2 - credentials file name
+				#		$3 - encrypted credentials file name		
+
+	# Check number of arguments
+	test $# -ne 3 && { echo "Invalid argument numbers in function encryptCredentialsFile(): $#"; exit 1; }
+
+	echo "Converting public key format."
+	# Convert $pubkey to PEM format for file encryption
+	pemPubKey=$(ssh-keygen -f /dev/stdin <<< $1 -e -m PKCS8) || { echo "Can not convert key file !"; exit 1; }
+
+	echo "Encrypting credentials file."
+	# Encrypt message file
+	openssl rsautl -encrypt -pubin -inkey /dev/stdin <<<"$pemPubKey" -ssl -in $2 -out $3 || { echo "Can not encrypt credentials file !"; exit 1; }
+
+
+	return 0
+}
+
+
+sendEmailToUser() {
+
+
+
+	return 0
+}
