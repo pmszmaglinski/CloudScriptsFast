@@ -2,6 +2,8 @@
 . ./functions
 . ../config.cfg
 
+checkAuth
+
 case $1 in
 add)
 	echo "Creating Amazon environment for user $username"

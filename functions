@@ -1,6 +1,10 @@
 #!/bin/bash
-usergroup='user.group'
-declare -a ACCESSKEYS
+
+checkAuth() { # Check credentials
+	/usr/bin/klist -s || { echo "You're not authorized to do this."; exit 1; }
+
+	return 0
+}
 
 addIAMUser() {  # Add IAM User and generate AccessKeyId and SecretAccessKey
 		# Arguments: $1 - username
@@ -200,18 +204,36 @@ chown $1.$1 /home/$1
 echo "$5:/home/$1 /home/$1    nfs4    nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2 0 0" >> /etc/fstab
 mount /home/$1
 
+
+########################################
+# Pliki powloki i zmienne srodowiskowe #
+########################################
+
+# Copy system files
+cp /etc/skel/.bash* /home/$1/
+chown $1.$1 /home/$1/.bash*
+
+# Generate table with config user vars...
+USERBASHVARS2=($(printf '"%s" ' "${USERBASHVARS[@]}"))
+for (( i=0; i< \${#USERBASHVARS2[@]}; i++ ));
+do
+	# ...and put them to bash script file
+	echo "\${USERBASHVARS2[\$i]}" >> /home/$1/.bashrc
+done
+
+
 ########################################
 # Montowanie przestrzeni roboczej WORK #
 ########################################
 
 echo -e "o\nn\np\n1\n\n\nw" | fdisk /dev/xvdc
 mkfs.xfs /dev/xvdc1
-mkdir -p /WORK
-echo "/dev/xvdc1 /WORK xfs	defaults	0 0" >> /etc/fstab
-mount /WORK
-chmod 750 /WORK
-chown $1.$1 /WORK
-ln -s /WORK /home/$1/WORK
+mkdir -p /WORK/$1
+echo "/dev/xvdc1 /WORK/$1 xfs	defaults	0 0" >> /etc/fstab
+mount /WORK/$1
+chmod 750 /WORK/$1
+chown $1.$1 /WORK/$1
+ln -s /WORK/$1 /home/$1/WORK
 
 ########################
 # Montowanie zasobu S3 #
