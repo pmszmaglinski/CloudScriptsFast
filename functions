@@ -139,7 +139,6 @@ deleteIPAUser() {	# Delete IPA user
          else echo "User $1 deleted from IPA system"
          fi
 
-
 	return 0
 }
 
@@ -174,6 +173,26 @@ deleteEFSHomedir() {	# Delete user's home dir in EFS resources
 	
 	return 0
 }
+
+generateSshKeys() {	# Generating SSH keys for user stuff synchronization
+			# Arguments:	$1 - username
+			#		$2 - user public key
+
+/usr/bin/ssh-keygen -t rsa -N "" -f /home/$1/.ssh/id_rsa -C ${1}-SyncKey >/dev/null || { echo "Error generating sync key pair for user $1"; exit 1; }
+
+ipa user-mod $1 --sshpubkey="$2" --sshpubkey="$(cat /home/marzem/.ssh/id_rsa.pub)"
+
+chown $1.$1 /home/$1/.ssh/id_rsa
+chown $1.$1 /home/$1/.ssh/id_rsa.pub
+
+return 0
+}
+
+
+
+
+
+
 
 generateUserDataFile() {	# Generate file for AMI configuration
 				# Arguments:	$1 - username

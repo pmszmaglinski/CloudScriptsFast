@@ -36,6 +36,12 @@ createIPAUser $username $firstName $lastName $emailAddress "$pubKey"
 
 createEFSHomedir $username $efsUrl
 
+#####################################
+# Generate keys for synchronization #
+#####################################
+
+generateSshKeys $username $pubKey
+
 
 #############################
 # Generate AMI init scripts #
