@@ -235,6 +235,39 @@ chmod 750 /WORK/$1
 chown $1.$1 /WORK/$1
 ln -s /WORK/$1 /home/$1/WORK
 
+
+###############################################
+# Osadzenie pliku synchronizacji zasobu  WORK #
+###############################################
+
+cat <<END > /home/$1/synchro.sh
+#/bin/bash
+
+: \\\${LOGNAME?"LOGNAME is unset !"}
+: \\\${HOME?"HOME is unset !"}
+: \\\${SYNCDIRS?"SYNCDIRS is unset !"}
+
+syncfile=\\\$SYNCDIRS
+
+if [ -e \\\$syncfile ]; then
+        echo "Synchronizing dirs defined in \\\$SYNCDIRS"
+        rsync -avr --files-from=\\\$syncfile \\\$HOME/ \\\$LOGNAME@\\\$HESSERVER:~/
+else
+        echo "\\\$SYNCRIRS variable points to not existing file !"
+fi
+END
+chown $1.$1 /home/$1/synchro.sh
+chmod u+x /home/$1/synchro.sh
+
+###############################################
+# Osadzenie pliku katalogow do synchronizacji #
+###############################################
+
+cat <<END > /home/$1/syncdirs.txt
+WORK/
+END
+chown $1.$1 /home/$1/syncdirs.txt
+
 ########################
 # Montowanie zasobu S3 #
 ########################
