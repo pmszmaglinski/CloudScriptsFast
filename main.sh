@@ -57,6 +57,13 @@ generateUserDataFile $username "${ACCESSKEYS[0]}" "${ACCESSKEYS[1]}" $userDataFi
 runInstance $username $userDataFile $amiImgId $instanceType "$secGroups" $vpcSubnetId $iamKeyName
 
 
+################
+# Configure HS #
+################
+
+addUserToHS $username $hesServerIpAddress $efsUrlProxy
+
+
 ###########################
 # Create credentials file #
 ###########################
@@ -78,6 +85,13 @@ encryptCredentialsFile "$pubKey" $credFileName $encCredFileName
 
 del)
 	echo "Deleteing Amazon environment for user $username"
+
+############
+# Clean HS #
+############
+
+delUserFromHS $username $hesServerIpAddress
+
 
 ###################################
 # Delete IAM user and Access Kyes #
