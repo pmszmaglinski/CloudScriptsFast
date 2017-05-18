@@ -176,12 +176,18 @@ generateSshKeys() {	# Generating SSH keys for user stuff synchronization
 			# Arguments:	$1 - username
 			#		$2 - user public key
 
-/usr/bin/ssh-keygen -t rsa -N "" -f /home/$1/.ssh/id_rsa -C ${1}-SyncKey >/dev/null || { echo "Error generating sync key pair for user $1"; exit 1; }
+	# Create .ssh directory
+	mkdir -p /home/$1/.ssh
+	chown $1.$1 /home/$1/.ssh
+	chmod 700 /home/$1/.ssh
 
-ipa user-mod $1 --sshpubkey="$2" --sshpubkey="$(cat /home/$1/.ssh/id_rsa.pub)"
+	# Generate ssh keys
+	/usr/bin/ssh-keygen -t rsa -N "" -f /home/$1/.ssh/id_rsa -C ${1}-SyncKey >/dev/null || { echo "Error generating sync key pair for user $1"; exit 1; }
 
-chown $1.$1 /home/$1/.ssh/id_rsa
-chown $1.$1 /home/$1/.ssh/id_rsa.pub
+	ipa user-mod $1 --sshpubkey="$2" --sshpubkey="$(cat /home/$1/.ssh/id_rsa.pub)"
+
+	chown $1.$1 /home/$1/.ssh/id_rsa
+	chown $1.$1 /home/$1/.ssh/id_rsa.pub
 
 return 0
 }
@@ -362,19 +368,22 @@ addUserToHS() {         # Adding user to HS
                         # Arguments:    $1 - username
                         #               $2 - HS IP address
                         #               $3 - EFS Proxy Url
+	
+	# Check for argument passed
+	test $# -ne 3 && { echo "Invalid argument numbers in function addUserToHS(): $#"; exit 1; }
 
-#########################################################
-# Requires public key authentication between both hosts #
-#########################################################
+	#########################################################
+	# Requires public key authentication between both hosts #
+	#########################################################
 
-# Test if pub key auth is enabled
-$(exec ssh -o BatchMode=yes $2 true) || { echo "Can not connect to HS. Check Your ssh keys."; exit 1; }
-echo "SSH connection to HS OK."
+	# Test if pub key auth is enabled
+	$(exec ssh -o BatchMode=yes $2 true) || { echo "Can not connect to HS. Check Your ssh keys."; exit 1; }
+	echo "SSH connection to HS OK."
 
-# Check if WORK is mounted
-ssh $2 grep -qsw "/WORK" /proc/mounts && echo "WORK storage is mounted." || { echo "WORK storage is NOT mounted.";  exit 1; }
+	# Check if WORK is mounted
+	ssh $2 grep -qsw "/WORK" /proc/mounts && echo "WORK storage is mounted." || { echo "WORK storage is NOT mounted.";  exit 1; }
 
-echo "Adding $1 to HS."
+	echo "Adding $1 to HS."
 
 ssh -T $2 <<END
 #!/bin/bash
@@ -394,7 +403,7 @@ echo "$3:/home/$1  /home/$1      nfs4    nfsvers=4.1,rsize=1048576,wsize=1048576
 mount /home/$1
 END
 
-return 0
+	return 0
 
 }
 
@@ -403,15 +412,17 @@ delUserFromHS() {       # Must run before removing EFS homedir
                         # Arguments:    $1 - username
                         #               $2 - HS IP address
 
-#########################################################
-# Requires public key authentication between both hosts #
-#########################################################
+	test $# -ne 2 && { echo "Invalid argument numbers in function delUserFromHS(): $#"; exit 1; }
 
-# Test if pub key auth is enabled
-$(exec ssh -o BatchMode=yes $2 true) || { echo "Can not connect to HS. Check Your ssh keys."; exit 1; }
+	#########################################################
+	# Requires public key authentication between both hosts #
+	#########################################################
 
-echo "SSH connection to HS OK."
-echo "Removing $1 from HS."
+	# Test if pub key auth is enabled
+	$(exec ssh -o BatchMode=yes $2 true) || { echo "Can not connect to HS. Check Your ssh keys."; exit 1; }
+
+	echo "SSH connection to HS OK."
+	echo "Removing $1 from HS."
 
 ssh -T $2 <<END
 #!/bin/bash
@@ -429,7 +440,7 @@ rm -rf /home/$1
 rm -rf /WORK/$1
 END
 
-return 0
+	return 0
 
 }
 

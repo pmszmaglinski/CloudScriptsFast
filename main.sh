@@ -13,8 +13,8 @@ add)
 #########################
 
 addIAMUser $username
-echo "AccessKeyId: ${ACCESSKEYS[0]}"
-echo "SecretAccessKey: ${ACCESSKEYS[1]}"
+#echo "AccessKeyId: ${ACCESSKEYS[0]}"
+#echo "SecretAccessKey: ${ACCESSKEYS[1]}"
 
 
 ####################
