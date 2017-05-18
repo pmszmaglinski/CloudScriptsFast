@@ -188,7 +188,7 @@ generateSshKeys() {	# Generating SSH keys for user stuff synchronization
 	# Generate ssh keys
 	/usr/bin/ssh-keygen -t rsa -N "" -f /home/$1/.ssh/id_rsa -C ${1}-SyncKey >/dev/null || { echo "Error generating sync key pair for user $1"; exit 1; }
 
-	ipa user-mod $1 --sshpubkey="$2" --sshpubkey="$(cat /home/$1/.ssh/id_rsa.pub)"
+	ipa user-mod $1 --sshpubkey="$2" --sshpubkey="$(cat /home/$1/.ssh/id_rsa.pub)" >/dev/null || { echo "Couldn't add sshkeys to authorization system"; exit 1; }
 
 	chown $1.$1 /home/$1/.ssh/id_rsa
 	chown $1.$1 /home/$1/.ssh/id_rsa.pub
@@ -273,7 +273,7 @@ syncfile=\\\$SYNCDIRS
 
 if [ -e \\\$syncfile ]; then
         echo "Synchronizing dirs defined in \\\$SYNCDIRS"
-        rsync -avr --files-from=\\\$syncfile \\\$HOME/ \\\$LOGNAME@\\\$HESSERVER:~/
+        rsync -avrK --files-from=\\\$syncfile \\\$HOME/ \\\$LOGNAME@\\\$HESSERVER:~/
 else
         echo "\\\$SYNCRIRS variable points to not existing file !"
 fi
