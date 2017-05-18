@@ -150,6 +150,10 @@ createEFSHomedir() {	# Create user's home dir in EFS resources
 
 	# Check if EFS /home is mounted
 	grep -qs "$2://home" /proc/mounts && echo "EFS storage is mounted." || { echo "EFS storage is NOT mounted !!!";  exit 1; }
+
+	# Update sss cache for proper user and group id
+	sss_cache -U -G && echo "SSS Cache (user,group) updated." || { echo "Couldn't update sss cache !"; exit 1; }
+
 	# Prepare user's home dir
 	mkdir /home/$1 && chown $1.$1 /home/$1 && chmod 750 /home/$1 && echo "EFS Home dir for user $1 prepered." || { echo "Couldn't prepare EFS home dir for user $1 !!!"; exit 1; }
 
