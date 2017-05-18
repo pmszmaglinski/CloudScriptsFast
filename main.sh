@@ -40,7 +40,7 @@ createEFSHomedir $username $efsUrl
 # Generate keys for synchronization #
 #####################################
 
-generateSshKeys $username $pubKey
+generateSshKeys $username "$pubKey"
 
 
 #############################

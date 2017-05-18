@@ -61,7 +61,7 @@ delIAMUser() {	# Remove user from AWS IAM and delete AccessKeyId and SecretAcces
 	
 	# Get and delete user's access keys
 	for i in $(aws iam list-access-keys --user-name $1 | jq -r ".AccessKeyMetadata[].AccessKeyId"); do 
-		echo "Removing users $1 access key $i"
+		echo "Removing users $1 access key."
 		aws iam delete-access-key --user-name $1 --access-key $i >/dev/null
 	done		
 
@@ -391,6 +391,9 @@ addUserToHS() {         # Adding user to HS
 
 ssh -T $2 <<END
 #!/bin/bash
+# Update sss cache (user,group)
+sss_cache -U -G
+
 # Make user's homedir
 mkdir -p /home/$1
 chown $1.$1 /home/$1
