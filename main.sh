@@ -34,7 +34,7 @@ createIPAUser $username $firstName $lastName $emailAddress "$pubKey"
 # Create EFS Home directory #
 #############################
 
-createEFSHomedir $username $efsUrl
+#createEFSHomedir $username $efsUrl
 
 #####################################
 # Generate keys for synchronization #
@@ -47,7 +47,7 @@ generateSshKeys $username "$pubKey"
 # Generate AMI init scripts #
 #############################
 
-generateUserDataFile $username "${ACCESSKEYS[0]}" "${ACCESSKEYS[1]}" $userDataFile $efsUrl $s3bucetName
+generateUserDataFile $username "${ACCESSKEYS[0]}" "${ACCESSKEYS[1]}" $userDataFile $syncKey $s3bucetName
 
 
 ####################
@@ -118,7 +118,7 @@ deleteIPAUser $username
 # Delete EFS Home directory #
 #############################
 
-deleteEFSHomedir $username $efsUrl
+#deleteEFSHomedir $username $efsUrl
 
 
 ##########################

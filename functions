@@ -125,6 +125,10 @@ createIPAUser() {	# Add user to IPA authorization system
 	 if [ $? -ne 0 ]; then echo "Error adding IPA user $1"
 		exit 1
 	else echo "User $1 added to IPA system"
+
+	# Update sss cache for proper user and group id
+	sss_cache -U -G && echo "SSS Cache (user,group) updated." || { echo "Couldn't update sss cache !"; exit 1; }
+
 	fi
 
 	return 0
@@ -180,18 +184,16 @@ generateSshKeys() {	# Generating SSH keys for user stuff synchronization
 			# Arguments:	$1 - username
 			#		$2 - user public key
 
-	# Create .ssh directory
-	mkdir -p /home/$1/.ssh
-	chown $1.$1 /home/$1/.ssh
-	chmod 700 /home/$1/.ssh
+	# Generate ssh sync keys
+	/usr/bin/ssh-keygen -t rsa -N "" -f ./id_rsa -C ${1}-SyncKey >/dev/null || { echo "Error generating sync key pair for user $1"; exit 1; }
 
-	# Generate ssh keys
-	/usr/bin/ssh-keygen -t rsa -N "" -f /home/$1/.ssh/id_rsa -C ${1}-SyncKey >/dev/null || { echo "Error generating sync key pair for user $1"; exit 1; }
+	# Add sync key to authorization system
+	ipa user-mod $1 --sshpubkey="$2" --sshpubkey="$(cat ./id_rsa.pub)" >/dev/null || { echo "Couldn't add sshkeys to authorization system"; exit 1; }
 
-	ipa user-mod $1 --sshpubkey="$2" --sshpubkey="$(cat /home/$1/.ssh/id_rsa.pub)" >/dev/null || { echo "Couldn't add sshkeys to authorization system"; exit 1; }
-
-	chown $1.$1 /home/$1/.ssh/id_rsa
-	chown $1.$1 /home/$1/.ssh/id_rsa.pub
+	# Key to apply in instance
+	syncKey="$(cat ./id_rsa)"
+	rm -rf ./id_rsa.pub
+	rm -rf ./id_rsa
 
 return 0
 }
@@ -202,7 +204,7 @@ generateUserDataFile() {	# Generate file for AMI configuration
 				#		$2 - AccessKeyId
 				#		$3 - SecretAccessKey
 				#		$4 - userdata file
-				#		$5 - EFS url
+				#		$5 - synchronization key
 				#		$6 - S3 Bucket Name
 
 	# Check number of argument passed to function	
@@ -215,17 +217,36 @@ generateUserDataFile() {	# Generate file for AMI configuration
 	echo "Generating AMI configuration file: $4"
 	cat <<EOF > ./$4 || { echo "Can not save $4 file !"; exit 1; }
 #!/bin/bash
+
+######################################
+# Przygotowanie przestrzeni dyskowej #
+######################################
+
+# Partitioning - [/dev/xvdc1 100M Home], [/dev/xvdc2 WORK]
+(echo o; echo n; echo p; echo 1; echo; echo +100M; echo n; echo p; echo; echo; echo; echo w;) | fdisk /dev/xvdc
+mkfs.xfs /dev/xvdc1
+mkfs.xfs /dev/xvdc2
+
 ################################
 # Montowanie katalogu domowego #
 ################################
 
-ACCESS_KEY_ID="$2"
-SECRET_ACCESS_KEY="$3"
 mkdir -p /home/$1
-chown $1.$1 /home/$1
-echo "$5:/home/$1 /home/$1    nfs4    nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2 0 0" >> /etc/fstab
+echo "/dev/xvdc1 /home/$1    xfs    defaults 0 0" >> /etc/fstab
 mount /home/$1
+chown $1.$1 /home/$1
+chmod 750 /home/$1
 
+########################################
+# Montowanie przestrzeni roboczej WORK #
+########################################
+
+mkdir -p /WORK/$1
+echo "/dev/xvdc2 /WORK/$1 xfs	defaults	0 0" >> /etc/fstab
+mount /WORK/$1
+chmod 750 /WORK/$1
+chown $1.$1 /WORK/$1
+ln -s /WORK/$1 /home/$1/WORK
 
 ########################################
 # Pliki powloki i zmienne srodowiskowe #
@@ -244,18 +265,17 @@ do
 done
 
 
-########################################
-# Montowanie przestrzeni roboczej WORK #
-########################################
+##########################################
+# Osadzenie klucza ssh do synchronizacji #
+##########################################
 
-echo -e "o\nn\np\n1\n\n\nw" | fdisk /dev/xvdc
-mkfs.xfs /dev/xvdc1
-mkdir -p /WORK/$1
-echo "/dev/xvdc1 /WORK/$1 xfs	defaults	0 0" >> /etc/fstab
-mount /WORK/$1
-chmod 750 /WORK/$1
-chown $1.$1 /WORK/$1
-ln -s /WORK/$1 /home/$1/WORK
+# Create .ssh directory
+mkdir -p /home/$1/.ssh
+chown $1.$1 /home/$1/.ssh
+chmod 700 /home/$1/.ssh
+echo "$5" > /home/$1/.ssh/id_rsa
+chown $1.$1 /home/$1/.ssh/id_rsa
+chmod 600 /home/$1/.ssh/id_rsa
 
 
 ###############################################
@@ -294,6 +314,8 @@ chown $1.$1 /home/$1/syncdirs.txt
 # Montowanie zasobu S3 #
 ########################
 
+ACCESS_KEY_ID="$2"
+SECRET_ACCESS_KEY="$3"
 echo "\$ACCESS_KEY_ID:\$SECRET_ACCESS_KEY" > /etc/s3fs.passwd
 chmod 400 /etc/s3fs.passwd
 mkdir /home/$1/S3
@@ -377,7 +399,7 @@ addUserToHS() {         # Adding user to HS
 	test $# -ne 3 && { echo "Invalid argument numbers in function addUserToHS(): $#"; exit 1; }
 
 	#########################################################
-	# Requires public key authentication between both hosts #
+	# Requires public key authentication between IPA and HS #
 	#########################################################
 
 	# Test if pub key auth is enabled
@@ -405,9 +427,9 @@ chown $1.$1 /WORK/$1
 chmod 750 /WORK/$1
 
 # Mount user homedir
-echo "$3:/home/$1  /home/$1      nfs4    nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2 0 0" >> /etc/fstab
+#echo "$3:/home/$1  /home/$1      nfs4    nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2 0 0" >> /etc/fstab
 
-mount /home/$1
+#mount /home/$1
 END
 
 	return 0
