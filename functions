@@ -278,37 +278,45 @@ chown $1.$1 /home/$1/.ssh/id_rsa
 chmod 600 /home/$1/.ssh/id_rsa
 
 
-###############################################
-# Osadzenie pliku synchronizacji zasobu  WORK #
-###############################################
+################################################
+# Osadzenie plikow synchronizacji zasobu  WORK #
+################################################
 
 cat <<END > /home/$1/synchro.sh
 #/bin/bash
 
 : \\\${LOGNAME?"LOGNAME is unset !"}
 : \\\${HOME?"HOME is unset !"}
-: \\\${SYNCDIRS?"SYNCDIRS is unset !"}
+: \\\${HESSERVER?"HESSERVER is unset !"}
 
-syncfile=\\\$SYNCDIRS
+syncinclude=\\\$HOME/syncinclude.txt
+syncexclude=\\\$HOME/syncexclude.txt
 
-if [ -e \\\$syncfile ]; then
-        echo "Synchronizing dirs defined in \\\$SYNCDIRS"
-        rsync -avrK --files-from=\\\$syncfile \\\$HOME/ \\\$LOGNAME@\\\$HESSERVER:~/
+if [ -e \\\$syncinclude ]; then
+        echo "Synchronizing files with server: HESSERVER=\\\$HESSERVER"
+        rsync -avrlK --files-from=\\\$syncinclude --exclude-from=\\\$syncexclude --no-implied-dirs --delete \\\$HOME/ \\\$LOGNAME@\\\$HESSERVER:~/
 else
-        echo "\\\$SYNCRIRS variable points to not existing file !"
+        echo "\\\$syncinclude file is not available."
 fi
 END
 chown $1.$1 /home/$1/synchro.sh
 chmod u+x /home/$1/synchro.sh
 
-###############################################
-# Osadzenie pliku katalogow do synchronizacji #
-###############################################
+cat <<END > /home/$1/syncexclude.txt
+.x2go*
+S3
+syncinclude.txt
+syncexclude.txt
+synchro.sh
+END
 
-cat <<END > /home/$1/syncdirs.txt
+chown $1.$1 /home/$1/syncexclude.txt
+
+cat <<END > /home/$1/syncinclude.txt
 WORK/
 END
-chown $1.$1 /home/$1/syncdirs.txt
+
+chown $1.$1 /home/$1/syncinclude.txt
 
 ########################
 # Montowanie zasobu S3 #
@@ -413,23 +421,38 @@ addUserToHS() {         # Adding user to HS
 
 ssh -T $2 <<END
 #!/bin/bash
-# Update sss cache (user,group)
+
+#################################
+# Update sss cache (user,group) #
+#################################
 sss_cache -U -G
 
-# Make user's homedir
+#######################
+# Make user's homedir #
+#######################
 mkdir -p /home/$1
 chown $1.$1 /home/$1
 chmod 750 /home/$1
 
-# Make WORK space
+###################
+# Make WORK space #
+###################
 mkdir -p /WORK/$1
 chown $1.$1 /WORK/$1
 chmod 750 /WORK/$1
+ln -s /WORK/$1/ /home/$1/WORK
 
-# Mount user homedir
-#echo "$3:/home/$1  /home/$1      nfs4    nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2 0 0" >> /etc/fstab
+##################
+# Add user quota #
+##################
 
-#mount /home/$1
+xfs_quota -x -c 'limit bsoft=90m bhard=100m $1' /home
+
+##########################
+# Add synchro to crontab #
+##########################
+
+
 END
 
 	return 0
@@ -455,12 +478,6 @@ delUserFromHS() {       # Must run before removing EFS homedir
 
 ssh -T $2 <<END
 #!/bin/bash
-# Prepare to umount
-fuser -km /home/$1
-
-# Umount and remove from fstab
-umount /home/$1
-sed -i "\|/home/$1|d" /etc/fstab
 
 # Remove empty user's homedir
 rm -rf /home/$1

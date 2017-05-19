@@ -47,7 +47,7 @@ generateSshKeys $username "$pubKey"
 # Generate AMI init scripts #
 #############################
 
-generateUserDataFile $username "${ACCESSKEYS[0]}" "${ACCESSKEYS[1]}" $userDataFile $syncKey $s3bucetName
+generateUserDataFile $username "${ACCESSKEYS[0]}" "${ACCESSKEYS[1]}" $userDataFile "$syncKey" $s3bucetName
 
 
 ####################
