@@ -294,7 +294,7 @@ syncexclude=\\\$HOME/syncexclude.txt
 
 if [ -e \\\$syncinclude ]; then
         echo "Synchronizing files with server: HESSERVER=\\\$HESSERVER"
-        rsync -avrlK --files-from=\\\$syncinclude --exclude-from=\\\$syncexclude --no-implied-dirs --delete \\\$HOME/ \\\$LOGNAME@\\\$HESSERVER:~/
+        rsync -avrlKO --files-from=\\\$syncinclude --exclude-from=\\\$syncexclude --no-implied-dirs --delete \\\$HOME/ \\\$LOGNAME@\\\$HESSERVER:~/
 else
         echo "\\\$syncinclude file is not available."
 fi
@@ -308,6 +308,8 @@ S3
 syncinclude.txt
 syncexclude.txt
 synchro.sh
+.rsyncjob.sh
+.rsyncjob.lock
 END
 
 chown $1.$1 /home/$1/syncexclude.txt
@@ -317,6 +319,39 @@ WORK/
 END
 
 chown $1.$1 /home/$1/syncinclude.txt
+
+###############################
+# Add cron job synchro script #
+###############################
+
+# Create script
+
+cat <<END > /home/$1/.rsyncjob.sh
+#!/bin/bash
+
+HOME=/home/$1
+LOGNAME=$1
+HESSERVER=$hesServerIpAddress
+
+if [ -e \\\$HOME/.rsyncjob.lock ]
+then
+        exit
+fi
+
+touch \\\$HOME/.rsyncjob.lock
+
+syncexclude=\\\$HOME/syncexclude.txt
+/bin/rsync -rtvu -e "/bin/ssh -i /home/$1/.ssh/id_rsa" --exclude-from=\\\$syncexclude --delete \\\$HOME/ \\\$LOGNAME@\\\$HESSERVER:~/ || > .homerrsyncproblem
+rm -f \\\$HOME/.rsyncjob.lock
+END
+
+chown $1.$1 /home/$1/.rsyncjob.sh
+
+# Add to cron
+cat <<END > /etc/cron.d/synchome
+*/01 * * * * testuser bash /home/$1/.rsyncjob.sh
+END
+chmod u+x /home/$1/.rsyncjob.sh
 
 ########################
 # Montowanie zasobu S3 #
@@ -447,11 +482,6 @@ ln -s /WORK/$1/ /home/$1/WORK
 ##################
 
 xfs_quota -x -c 'limit bsoft=90m bhard=100m $1' /home
-
-##########################
-# Add synchro to crontab #
-##########################
-
 
 END
 
