@@ -1,7 +1,11 @@
 #!/bin/bash
 
+# Color output
+RED='\033[0;31m'
+NC='\033[0m'
+
 checkAuth() { # Check credentials
-	/usr/bin/klist -s || { echo "You're not authorized to do this."; exit 1; }
+	/usr/bin/klist -s || { echo -e "${RED}You're not authorized to do this.${NC}"; exit 1; }
 
 	return 0
 }
@@ -349,7 +353,7 @@ chown $1.$1 /home/$1/.rsyncjob.sh
 
 # Add to cron
 cat <<END > /etc/cron.d/synchome
-*/01 * * * * testuser bash /home/$1/.rsyncjob.sh
+*/01 * * * * $1 bash /home/$1/.rsyncjob.sh
 END
 chmod u+x /home/$1/.rsyncjob.sh
 
