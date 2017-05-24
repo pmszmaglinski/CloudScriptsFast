@@ -367,6 +367,11 @@ echo "\$ACCESS_KEY_ID:\$SECRET_ACCESS_KEY" > /etc/s3fs.passwd
 chmod 400 /etc/s3fs.passwd
 mkdir /home/$1/S3
 s3fs $6:/$1 /home/$1/S3 -o passwd_file=/etc/s3fs.passwd,allow_other,uid=$userid,umask=077,gid=$userid
+
+# Add script to mount s3fs at next reboot
+echo "s3fs $6:/$1 /home/$1/S3 -o passwd_file=/etc/s3fs.passwd,allow_other,uid=$userid,umask=077,gid=$userid" >> /etc/rc.local
+chmod +x /etc/rc.local
+
 EOF
 	
 	return 0
