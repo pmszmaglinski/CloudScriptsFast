@@ -1,8 +1,16 @@
 #!/bin/bash
 
+################
+# Program vars #
+################
+
 # Color output
 RED='\033[0;31m'
 NC='\033[0m'
+
+# Log file
+NOW=$(date +"%F-%T")
+LOGFILE="./log-${NOW}.txt"
 
 checkAuth() { # Check credentials
 	/usr/bin/klist -s || { echo -e "${RED}You're not authorized to do this.${NC}"; exit 1; }
@@ -376,6 +384,41 @@ EOF
 	
 	return 0
 }
+
+
+createSecurityGroup() { # Cretate user's secrurity group for IP allowed hosts
+                        # Arguments:    $1 - username
+                        #               $2 - user source IP addresses
+
+        # Create SG
+        userSg=$(aws ec2 create-security-group --group-name ${1} --description "Hes-Cloud-User" --output text --query 'GroupId' ) &>> ${LOGFILE} || { echo "Couldn't create Security Group for user ${1}."; exit 1; }
+
+        # Add user's IP
+        for i in ${userSourceIp}; do
+                echo "Adding address ${i} to security group ${1}."
+                aws ec2 authorize-security-group-ingress --group-name ${1} --protocol tcp --port 22 --cidr ${i} &>> ${LOGFILE} || { echo -e "${RED}Couldn't add IP address ${i} to user's ${1} security group.${NC}"; exit 1; }
+        done
+
+        # Modify security groups that instance will belong to (runInstance() function)
+        secGroups+=" "${userSg}
+        echo "User's security groups are now: ${secGroups}."
+
+return 0
+}
+
+
+deleteSecurityGroup() { # Detete user's security group
+                        # Arguments:    $1 - username
+
+        # Delete user's SG
+        echo "Deleteing security group name ${1}.";
+        aws ec2 delete-security-group --group-name ${1}  &>> ${LOGFILE} || { echo -e "${RED}Couldn't delete security group name: ${1}.${NC}"; exit 1; }
+
+
+return 0
+}
+
+
 
 runInstance() {	# Run AMI instance
 		# Arguments: 	$1 - username

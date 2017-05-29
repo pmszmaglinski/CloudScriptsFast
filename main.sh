@@ -2,6 +2,7 @@
 . ./functions
 . ../config.cfg
 
+
 checkAuth
 
 case $1 in
@@ -42,13 +43,17 @@ createIPAUser $username $firstName $lastName $emailAddress "$pubKey"
 
 generateSshKeys $username "$pubKey"
 
-
 #############################
 # Generate AMI init scripts #
 #############################
 
 generateUserDataFile $username "${ACCESSKEYS[0]}" "${ACCESSKEYS[1]}" $userDataFile "$syncKey" $s3bucetName
 
+##############################
+# Create user security group #
+##############################
+
+createSecurityGroup $username "$userSourceIp"
 
 ####################
 # Run AMI Instance #
@@ -127,12 +132,17 @@ deleteIPAUser $username
 
 rm -rf ./$userDataFile
 
-
 #######################
 # Remove AMI Instance #
 #######################
 
 terminateInstance $username
+
+##############################
+# Delete user security group #
+##############################
+
+deleteSecurityGroup $username
 
 
 ###########################
