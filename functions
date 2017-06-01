@@ -322,6 +322,8 @@ syncexclude.txt
 synchro.sh
 .rsyncjob.sh
 .rsyncjob.lock
+.homerrsyncproblem
+.cache/mozilla*
 END
 
 chown $1.$1 /home/$1/syncexclude.txt
@@ -345,23 +347,22 @@ HOME=/home/$1
 LOGNAME=$1
 HESSERVER=$hesServerIpAddress
 
-if [ -e \\\$HOME/.rsyncjob.lock ]
-then
-        exit
-fi
-
-touch \\\$HOME/.rsyncjob.lock
-
+while true; do
+/bin/ps -f -u $1 | grep -v grep| grep -qs "/bin/rsync -rtvu -e /bin/ssh -i /home/$1/.ssh/id_rsa --exclude-from=/home/$1/syncexclude.txt --delete /home/$1/" ||
+{
 syncexclude=\\\$HOME/syncexclude.txt
 /bin/rsync -rtvu -e "/bin/ssh -i /home/$1/.ssh/id_rsa" --exclude-from=\\\$syncexclude --delete \\\$HOME/ \\\$LOGNAME@\\\$HESSERVER:~/ || > .homerrsyncproblem
-rm -f \\\$HOME/.rsyncjob.lock
+}
+sleep 3
+done
+
 END
 
 chown $1.$1 /home/$1/.rsyncjob.sh
 
 # Add to cron
 cat <<END > /etc/cron.d/synchome
-*/01 * * * * $1 bash /home/$1/.rsyncjob.sh
+*/01 * * * * $1 bash -c '/sbin/pidof -x .rsyncjob.sh || /home/$1/.rsyncjob.sh'
 END
 chmod u+x /home/$1/.rsyncjob.sh
 
