@@ -322,7 +322,7 @@ syncexclude.txt
 synchro.sh
 .rsyncjob.sh
 .rsyncjob.lock
-.homerrsyncproblem
+.homeRsyncProblem
 .cache/mozilla*
 END
 
@@ -351,7 +351,7 @@ while true; do
 /bin/ps -f -u $1 | grep -v grep| grep -qs "/bin/rsync -rtvu -e /bin/ssh -i /home/$1/.ssh/id_rsa --exclude-from=/home/$1/syncexclude.txt --delete /home/$1/" ||
 {
 syncexclude=\\\$HOME/syncexclude.txt
-/bin/rsync -rtvu -e "/bin/ssh -i /home/$1/.ssh/id_rsa" --exclude-from=\\\$syncexclude --delete \\\$HOME/ \\\$LOGNAME@\\\$HESSERVER:~/ || > .homerrsyncproblem
+/bin/rsync -rtvu -e "/bin/ssh -i /home/$1/.ssh/id_rsa" --exclude-from=\\\$syncexclude --delete \\\$HOME/ \\\$LOGNAME@\\\$HESSERVER:~/ || > .homeRsyncProblem
 }
 sleep 3
 done
