@@ -306,8 +306,8 @@ syncexclude=\\\$HOME/syncexclude.txt
 
 if [ -e \\\$syncinclude ]; then
         echo "Synchronizing files with server: HESSERVER=\\\$HESSERVER"
-        rsync -avrlKO --update --files-from=\\\$syncinclude --exclude-from=\\\$syncexclude --no-implied-dirs \\\$HOME/ \\\$LOGNAME@\\\$HESSERVER:~/
-	rsync -avrlKO --update --files-from=\\\$syncinclude --exclude-from=\\\$syncexclude --no-implied-dirs \\\$LOGNAME@\\\$HESSERVER:~/ \\\$HOME/
+        rsync -avrlKO --progress --update --files-from=\\\$syncinclude --exclude-from=\\\$syncexclude --no-implied-dirs \\\$HOME/ \\\$LOGNAME@\\\$HESSERVER:~/
+	rsync -avrlKO --progress --update --files-from=\\\$syncinclude --exclude-from=\\\$syncexclude --no-implied-dirs \\\$LOGNAME@\\\$HESSERVER:~/ \\\$HOME/
 else
         echo "\\\$syncinclude file is not available."
 fi
