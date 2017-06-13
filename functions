@@ -306,7 +306,8 @@ syncexclude=\\\$HOME/syncexclude.txt
 
 if [ -e \\\$syncinclude ]; then
         echo "Synchronizing files with server: HESSERVER=\\\$HESSERVER"
-        rsync -avrlKO --files-from=\\\$syncinclude --exclude-from=\\\$syncexclude --no-implied-dirs --delete \\\$HOME/ \\\$LOGNAME@\\\$HESSERVER:~/
+        rsync -avrlKO --update --files-from=\\\$syncinclude --exclude-from=\\\$syncexclude --no-implied-dirs \\\$HOME/ \\\$LOGNAME@\\\$HESSERVER:~/
+	rsync -avrlKO --update --files-from=\\\$syncinclude --exclude-from=\\\$syncexclude --no-implied-dirs \\\$LOGNAME@\\\$HESSERVER:~/ \\\$HOME/
 else
         echo "\\\$syncinclude file is not available."
 fi
@@ -324,6 +325,7 @@ synchro.sh
 .rsyncjob.lock
 .homeRsyncProblem
 .cache/mozilla*
+*.swp
 END
 
 chown $1.$1 /home/$1/syncexclude.txt
@@ -348,10 +350,11 @@ LOGNAME=$1
 HESSERVER=$hesServerIpAddress
 
 while true; do
-/bin/ps -f -u $1 | grep -v grep| grep -qs "/bin/rsync -rtvu -e /bin/ssh -i /home/$1/.ssh/id_rsa --exclude-from=/home/$1/syncexclude.txt --delete /home/$1/" || \ 
+/bin/ps -f -u $1 | grep -v grep| grep -qs "/bin/rsync -rtvu -e /bin/ssh -i /home/$1/.ssh/id_rsa --exclude-from=/home/$1/syncexclude.txt --update" || \\\ 
 {
 syncexclude=\\\$HOME/syncexclude.txt
-/bin/rsync -rtvu -e "/bin/ssh -i /home/$1/.ssh/id_rsa" --exclude-from=\\\$syncexclude --delete \\\$HOME/ \\\$LOGNAME@\\\$HESSERVER:~/ || > .homeRsyncProblem
+/bin/rsync -rtvu -e "/bin/ssh -i /home/$1/.ssh/id_rsa" --exclude-from=\\\$syncexclude --update \\\$HOME/ \\\$LOGNAME@\\\$HESSERVER:~/
+/bin/rsync -rtvu -e "/bin/ssh -i /home/$1/.ssh/id_rsa" --exclude-from=\\\$syncexclude --update \\\$LOGNAME@\\\$HESSERVER:~/ \\\$HOME/
 }
 sleep 3
 done
@@ -362,7 +365,7 @@ chown $1.$1 /home/$1/.rsyncjob.sh
 
 # Add to cron
 cat <<END > /etc/cron.d/synchome
-*/01 * * * * $1 bash -c '/sbin/pidof -x .rsyncjob.sh || /home/$1/.rsyncjob.sh'
+*/01 * * * * $1 bash -c '{ [ ! \\\$(/sbin/pidof -x .rsyncjob.sh) ] && /home/$1/.rsyncjob.sh; } || { [ \\\$(/sbin/pidof -x .rsyncjob.sh) ] && [ \\\$(/usr/bin/ps -p \\\$(/sbin/pidof -x .rsyncjob.sh) -o etimes=) -gt 500 ] && kill \\\$(/sbin/pidof -x .rsyncjob.sh) && /home/$1/.rsyncjob.sh; }'
 END
 chmod u+x /home/$1/.rsyncjob.sh
 
