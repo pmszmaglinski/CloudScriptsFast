@@ -383,6 +383,23 @@ s3fs $6:/$1 /home/$1/S3 -o passwd_file=/etc/s3fs.passwd,allow_other,uid=$userid,
 echo "s3fs $6:/$1 /home/$1/S3 -o passwd_file=/etc/s3fs.passwd,allow_other,uid=$userid,umask=077,gid=$userid" >> /etc/rc.local
 chmod +x /etc/rc.local
 
+#######################
+# Tcpwrappers for ssh #
+#######################
+
+cat <<END >> /etc/hosts.allow
+
+# Deny cross hosts login
+sshd : $vpcSubnet \\
+     : spawn /bin/echo \$(/bin/date) from %h>>/var/log/ssh_log.log
+     : deny
+sshd : $hesServerSubnet \\
+     : spawn /bin/echo \$(/bin/date) from %h>>/var/log/ssh_log.log
+     : deny
+
+END
+chmod 600 /var/log/ssh_log.log
+
 EOF
 	
 	return 0
