@@ -354,7 +354,6 @@ while true; do
 {
 syncexclude=\\\$HOME/syncexclude.txt
 /bin/rsync -rtvu -e "/bin/ssh -i /home/$1/.ssh/id_rsa" --exclude-from=\\\$syncexclude --update \\\$HOME/ \\\$LOGNAME@\\\$HESSERVER:~/
-/bin/rsync -rtvu -e "/bin/ssh -i /home/$1/.ssh/id_rsa" --exclude-from=\\\$syncexclude --update \\\$LOGNAME@\\\$HESSERVER:~/ \\\$HOME/
 }
 sleep 3
 done
