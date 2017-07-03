@@ -709,7 +709,7 @@ encryptCredentialsFile() {	# Encrypt file with user credentials
 
 sendEmailToUser() {
 
-
+	# Function to send confirmation email to user
 
 	return 0
 }
