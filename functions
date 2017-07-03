@@ -195,12 +195,13 @@ deleteEFSHomedir() {	# Delete user's home dir in EFS resources
 generateSshKeys() {	# Generating SSH keys for user stuff synchronization
 			# Arguments:	$1 - username
 			#		$2 - user public key
+			#		$3 - cloudManagerKey
 
 	# Generate ssh sync keys
 	/usr/bin/ssh-keygen -t rsa -N "" -f ./id_rsa -C ${1}-SyncKey >/dev/null || { echo "Error generating sync key pair for user $1"; exit 1; }
 
 	# Add sync key to authorization system
-	ipa user-mod $1 --sshpubkey="$2" --sshpubkey="$(cat ./id_rsa.pub)" >/dev/null || { echo "Couldn't add sshkeys to authorization system"; exit 1; }
+	ipa user-mod $1 --sshpubkey="$2" --sshpubkey="$(cat ./id_rsa.pub)" --sshpubkey="$3" >/dev/null || { echo "Couldn't add sshkeys to authorization system"; exit 1; }
 
 	# Key to apply in instance
 	syncKey="$(cat ./id_rsa)"
@@ -387,18 +388,75 @@ chmod +x /etc/rc.local
 # Tcpwrappers for ssh #
 #######################
 
-cat <<END >> /etc/hosts.allow
+cat <<END >> /etc/hosts.deny
 
 # Deny cross hosts login
-sshd : $vpcSubnet \\
-     : spawn /bin/echo \$(/bin/date) from %h>>/var/log/ssh_log.log
+sshd : $vpcSubnet \\\ 
+     : spawn /bin/echo \\\$(/bin/date) from %h>>/var/log/ssh_wrappers.log
      : deny
-sshd : $hesServerSubnet \\
-     : spawn /bin/echo \$(/bin/date) from %h>>/var/log/ssh_log.log
+sshd : $hesServerSubnet \\\ 
+     : spawn /bin/echo \\\$(/bin/date) from %h>>/var/log/ssh_wrappers.log
      : deny
-
 END
+/bin/touch /var/log/ssh_log.log
 chmod 600 /var/log/ssh_log.log
+
+cat <<END >> /etc/hosts.allow
+
+# Allow ssh for Ansible
+sshd : ${ldapIpa}/32
+END
+
+###################
+# Firewall config #
+###################
+
+cat <<END > /etc/rsyslog.d/iptables.conf
+:msg, startswith, "iptables: " -/var/log/iptables.log
+& ~
+END
+/bin/systemctl restart rsyslog
+/bin/systemctl disable firewalld
+/bin/yum -y install iptables-services
+/sbin/iptables -F
+/sbin/iptables -A INPUT -m state --state NEW -m tcp -p tcp --dport 22 -j ACCEPT
+/sbin/iptables -A OUTPUT -o eth0 -p tcp --sport 22 -m state --state ESTABLISHED -j ACCEPT
+/sbin/iptables -A OUTPUT -o eth0 -p tcp -d ${hesServerIpAddress} --dport 22 -m state --state NEW,ESTABLISHED -j ACCEPT
+/sbin/iptables -A OUTPUT -o eth0 -p icmp --icmp-type 8 -d ${hesServerIpAddress} -m state --state NEW,ESTABLISHED -j ACCEPT
+/sbin/iptables -A OUTPUT -o eth0 -p icmp --icmp-type 8 -d ${licenseServer} -m state --state NEW,ESTABLISHED -j ACCEPT
+/sbin/iptables -A OUTPUT -o eth0 -p tcp -d ${licenseServer} --dport ${aldecLicensePort} -m state --state NEW,ESTABLISHED -j ACCEPT
+/sbin/iptables -A OUTPUT -o eth0 -p tcp -d ${licenseServer} --dport ${xilinxLicensePort} -m state --state NEW,ESTABLISHED -j ACCEPT
+/sbin/iptables -A OUTPUT -o eth0 -p tcp -d ${licenseServer} --dport ${aldecLicenseManagerPort} -m state --state NEW,ESTABLISHED -j ACCEPT
+/sbin/iptables -A OUTPUT -o eth0 -p tcp -d ${licenseServer} --dport ${xilinxLicenseManagerPort} -m state --state NEW,ESTABLISHED -j ACCEPT
+/sbin/iptables -A OUTPUT -o eth0 -p udp -d ${internalDns} --dport 53 -m state --state NEW -j ACCEPT
+/sbin/iptables -A OUTPUT -o eth0 -p udp -d ${internalDhcp} --dport 67 -m state --state NEW -j ACCEPT
+/sbin/iptables -A OUTPUT -o eth0 -p tcp -d ${internalEfs} --dport 2049 -m state --state NEW,ESTABLISHED -j ACCEPT
+/sbin/iptables -A OUTPUT -o eth0 -p udp -d ${internalEfs} --dport 2049 -m state --state NEW,ESTABLISHED -j ACCEPT
+/sbin/iptables -A OUTPUT -o eth0 -p tcp -d ${ldapIpa} --dport 389 -m state --state NEW,ESTABLISHED -j ACCEPT
+/sbin/iptables -A OUTPUT -o eth0 -p tcp -d ${ldapIpa} --dport 88 -m state --state NEW,ESTABLISHED -j ACCEPT
+/sbin/iptables -A OUTPUT -o eth0 -p udp -d ${ldapIpa} --dport 53 -m state --state NEW -j ACCEPT
+/sbin/iptables -A OUTPUT -o eth0 -p udp -d ${ldapIpa} --dport 123 -m state --state NEW,ESTABLISHED -j ACCEPT
+/sbin/iptables -A OUTPUT -o eth0 -p tcp --dport 80 -m state --state NEW,ESTABLISHED -j ACCEPT
+/sbin/iptables -A OUTPUT -o eth0 -p tcp --dport 443 -m state --state NEW,ESTABLISHED -j ACCEPT
+/sbin/iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+/sbin/iptables -A INPUT -i lo -j ACCEPT
+/sbin/iptables -A OUTPUT -o lo -j ACCEPT
+/sbin/iptables -N LOGGING
+/sbin/iptables -A OUTPUT -j LOGGING
+/sbin/iptables -A INPUT -j LOGGING
+/sbin/iptables -A LOGGING -m limit --limit 2/min -j LOG --log-prefix "iptables: " --log-level 7
+/sbin/iptables -A LOGGING -j DROP
+/sbin/iptables -P INPUT DROP
+/sbin/iptables -P FORWARD DROP
+/sbin/iptables -P OUTPUT DROP
+/sbin/service iptables save
+
+
+#############################################
+# Remove annoyng polkit monit on user login #
+#############################################
+
+sed -e '/Exec/ s/^#*/#/' -i /etc/xdg/autostart/xfce-polkit.desktop
 
 EOF
 	
@@ -555,6 +613,12 @@ ln -s /WORK/$1/ /home/$1/WORK
 
 xfs_quota -x -c 'limit bsoft=90m bhard=100m $1' /home
 
+###########################################################################
+# Remove annoyng polkit monit on user login - if not already commented out#
+###########################################################################
+
+sed -e '/Exec/ s/^#*/#/' -i /etc/xdg/autostart/xfce-polkit.desktop
+
 END
 
 	return 0
@@ -580,6 +644,11 @@ delUserFromHS() {       # Must run before removing EFS homedir
 
 ssh -T $2 <<END
 #!/bin/bash
+
+# Umount gnome virtual desktop (gnome bug)
+if [ -d "/home/$1/.gvfs" ]; then
+umount /home/$1/.gvfs
+fi
 
 # Remove empty user's homedir
 rm -rf /home/$1
