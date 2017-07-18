@@ -458,6 +458,14 @@ END
 
 sed -e '/Exec/ s/^#*/#/' -i /etc/xdg/autostart/xfce-polkit.desktop
 
+###############################
+# Install additional software #
+###############################
+
+yum -y install zip.x86_64
+yum -y install unzip.x86_64
+
+
 EOF
 	
 	return 0
