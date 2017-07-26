@@ -464,7 +464,7 @@ sed -e '/Exec/ s/^#*/#/' -i /etc/xdg/autostart/xfce-polkit.desktop
 
 yum -y install zip.x86_64
 yum -y install unzip.x86_64
-
+yum -y groupinstall "MATE Desktop"
 
 EOF
 	
@@ -533,7 +533,7 @@ runInstance() {	# Run AMI instance
 	
 	# Tag instance with username
 	echo "Tagging instance $instanceId with Name=$1"
-	aws ec2 create-tags --resources $instanceId --tags Key=Name,Value=$1 >/dev/null || { echo "Can not Tag instance $instanceId with keys name=$1 !"; exit 1; }
+	aws ec2 create-tags --resources $instanceId --tags Key=Name,Value=$1 Key=InstanceType,Value=HesCloudInstance >/dev/null || { echo "Can not Tag instance $instanceId with keys name=$1 !"; exit 1; }
 	
 	# Get instance IP address
 	amiIpAddress=`aws ec2 describe-instances --instance-ids $instanceId | jq -r ".Reservations[].Instances[].PublicIpAddress"` || { echo "Can not get instance public IP address"; exit 1; }
